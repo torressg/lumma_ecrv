@@ -1,8 +1,11 @@
 const puppeteer = require('puppeteer');
+const fs = require('fs');
+
 require('dotenv').config({ path: './constants/.env' });
 
 const Tab = require('./modules/Pup_modules/tab');
 const Delay = require('./modules/Pup_modules/delay');
+const DeathCaptcha = require('./modules/DeathByCaptcha/death');
 
 async function runAutomation() {
 
@@ -48,10 +51,35 @@ async function runAutomation() {
 
         await Tab(page, 13)
         await page.keyboard.press('Enter')
+        await Delay(5000)
+        await frameBody.evaluate(() => {
+            Array.from(document.querySelectorAll('.list-group-item a.dropdown-toggle')).find(el => el.textContent.includes('Processos')).click();
+        });
+        await Delay(1000)
+        await frameBody.waitForFunction(
+            text => document.body.innerText.includes(text),
+            {},
+            'Consultar Ficha Cadastral'
+        );
 
-        // await browser.close()
+        await frameBody.evaluate(() => {
+            Array.from(document.querySelectorAll('.list-group-item-sub.dropdown a')).find(el => el.textContent.includes('Consultar Ficha Cadastral')).click();
+        });
+        await frameBody.waitForFunction(
+            text => document.body.innerText.includes(text),
+            {},
+            'Placa'
+        );
 
+        await frameBody.type('.campos_upper', 'LMP0H66')
+
+
+    } else {
+        console.log("Frame 'body' não encontrado.");
     }
+
+    // await browser.close()
+
 }
 
-runAutomation();
+runAutomation()
