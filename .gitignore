@@ -4,3 +4,5 @@ modules
 *.html
 main copy.js
 frame.js
+*.png
+./imageCaptcha/

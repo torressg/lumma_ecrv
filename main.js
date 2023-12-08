@@ -6,6 +6,7 @@ require('dotenv').config({ path: './constants/.env' });
 const Tab = require('./modules/Pup_modules/tab');
 const Delay = require('./modules/Pup_modules/delay');
 const DeathCaptcha = require('./modules/DeathByCaptcha/death');
+const path = require('path');
 
 async function runAutomation() {
 
@@ -72,7 +73,22 @@ async function runAutomation() {
         );
 
         await frameBody.type('.campos_upper', 'LMP0H66')
+        await page.screenshot({ path: './imageCaptcha/captcha.png', clip: { x: 230, y: 361, width: 225, height: 73 } })
+        let captcha = await DeathCaptcha('./imageCaptcha/captcha.png')
+        await frameBody.type('#captchaResponse', captcha)
+        await frameBody.evaluate(() => {
+            document.querySelector('.bt_pesquisar').click();
+        });
+        await frameBody.waitForFunction(
+            text => document.body.innerText.includes(text),
+            {},
+            'DADOS DA FICHA CADASTRAL'
+        );
+        await frameBody.evaluate(() => {
+            document.querySelector('.bt_imprimir').click();
+        });
 
+        await page.pdf(pdfOptions);
 
     } else {
         console.log("Frame 'body' não encontrado.");
