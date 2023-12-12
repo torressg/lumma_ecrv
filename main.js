@@ -44,10 +44,6 @@ async function runAutomation() {
     // Caso o Frame esteja disponível
     if (frameBody) {
 
-        for (i = 1; i < dadosDaPrimeiraColuna.length; i++) {
-            let placa = dadosDaPrimeiraColuna[i]
-            console.log(placa)}
-
         // // Confima o aviso de Informação
         // await frameBody.waitForSelector('.modal-footer .btn-primary', { visible: true });
         // await frameBody.waitForSelector('#notificacoes > div > div > div.modal-footer > div > div.col-sm-4 > button')
@@ -91,7 +87,6 @@ async function runAutomation() {
         // await page.keyboard.press('Enter')
         // await Delay(150000)
 
-
         await frameBody.evaluate(() => {
             Array.from(document.querySelectorAll('.list-group-item a.dropdown-toggle')).find(el => el.textContent.includes('Processos')).click();
         });
@@ -102,8 +97,6 @@ async function runAutomation() {
             'Consultar Ficha Cadastral'
         );
 
-
-
         await frameBody.evaluate(() => {
             Array.from(document.querySelectorAll('.list-group-item-sub.dropdown a')).find(el => el.textContent.includes('Consultar Ficha Cadastral')).click();
         });
@@ -112,7 +105,6 @@ async function runAutomation() {
             {},
             'Placa'
         );
-
 
         let mensagemDialogo
 
@@ -124,6 +116,8 @@ async function runAutomation() {
         for (i = 1; i <= dadosDaPrimeiraColuna.length; i++) {
             let placa = dadosDaPrimeiraColuna[i]
             let captchaCorreto = false;
+
+            await frameBody.waitForSelector('.campos_upper')
 
             while (!captchaCorreto) {
                 // Insere a placa e tira um screenshot do captcha
@@ -139,7 +133,6 @@ async function runAutomation() {
                     document.querySelector('.bt_pesquisar').click();
                 });
 
-
                 try {
                     // Espera pelo texto indicativo de sucesso, ajuste o tempo de espera conforme necessário
                     await frameBody.waitForFunction(
@@ -152,6 +145,7 @@ async function runAutomation() {
                     // Se o texto não for encontrado, o loop tentará novamente
                     if (mensagemDialogo.includes('PLACA')) {
                         console.log(`A placa ${placa} é inválida.`)
+                        i++
                     } else if (mensagemDialogo.includes('IMAGE')) {
                         console.log("Captcha incorreto, tentando novamente...");
 
@@ -190,10 +184,6 @@ async function runAutomation() {
             });
 
             console.log(dadosTabela);
-
-            // await frameBody.evaluate(() => {
-            //     document.querySelector('.bt_imprimir').click();
-            // });
 
             await frameBody.evaluate(() => {
                 document.querySelector('#tabBotoes > tbody > tr > td > a.bt_voltar').click();
