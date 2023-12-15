@@ -16,6 +16,18 @@ function lerPrimeiraColunaDoExcel(caminhoArquivo) {
     return dados.map(row => row[0]); // Retorna apenas a primeira coluna de cada linha
 }
 
+function salvarDadosExcel(dados) {
+    const headers = ['Placa', 'Status', 'N° da Ficha', 'Ano Ficha', 'Renavam', 'Chassi', 'Placa', 'Município', 'Despachante', 'Status Registro', 'Retorno Consistência', 'Opção', 'Inclusão da Ficha'];
+    let worksheet = XLSX.utils.aoa_to_sheet([headers]);
+    dados.forEach(dado => {
+        const row = Object.values(dado);
+        XLSX.utils.sheet_add_aoa(worksheet, [row], { origin: -1 });
+    });
+    let workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Dados");
+    XLSX.writeFile(workbook, 'dadosTabela.xlsx');
+}
+
 // Variáveis para dialog gerais
 let dialogAction = 'dismiss';
 let lastDialogMessage = '';
@@ -48,254 +60,250 @@ async function realizarLoginEVerificacoes(page, frameBody, CPF, SENHA) {
 }
 
 async function runAutomation() {
+    let worksheet
+    let workbook
+    let browser
+    let page
+    let todosOsDados
+    try {
+        // Variáveis necessárias
+        const CPF = process.env.CPF
+        const SENHA = process.env.SENHA
+        const linkECRV = 'https://www.e-crvsp.sp.gov.br/'
 
-    // Variáveis necessárias
-    const CPF = process.env.CPF
-    const SENHA = process.env.SENHA
-    const linkECRV = 'https://www.e-crvsp.sp.gov.br/'
+        // Armazenando dados do Excel
+        const dadosDaPrimeiraColuna = lerPrimeiraColunaDoExcel('./ECRV.xlsx');
 
-    // Armazenando dados do Excel
-    const dadosDaPrimeiraColuna = lerPrimeiraColunaDoExcel('./ECRV.xlsx');
+        browser = await puppeteer.launch({
+            headless: false,
+            protocolTimeout: 90000
+        });
+        page = await browser.newPage();
+        await page.goto(linkECRV, { waitUntil: 'networkidle2' })
 
-    const browser = await puppeteer.launch({
-        headless: false,
-        protocolTimeout: 90000
-    });
-    const page = await browser.newPage();
-    await page.goto(linkECRV, { waitUntil: 'networkidle2' })
+        // Ativa percepção de dialogs, com condições
+        page.on('dialog', async dialog => {
+            lastDialogMessage = dialog.message();
+            if (dialogAction === 'dismiss') {
+                await dialog.dismiss();
+            } else if (dialogAction === 'accept') {
+                await dialog.accept();
+            }
+        });
 
-    // Ativa percepção de dialogs, com condições
-    page.on('dialog', async dialog => {
-        lastDialogMessage = dialog.message();
-        if (dialogAction === 'dismiss') {
-            await dialog.dismiss();
-        } else if (dialogAction === 'accept') {
-            await dialog.accept();
-        }
-    });
+        // Seleciona o Frame da página
+        let frameBody = page.frames().find(frame => frame.name() === 'body');
 
-    // Seleciona o Frame da página
-    let frameBody = page.frames().find(frame => frame.name() === 'body');
+        // Caso o Frame esteja disponível
+        if (frameBody) {
 
-    // Caso o Frame esteja disponível
-    if (frameBody) {
+            // Login no e-CRV
+            await realizarLoginEVerificacoes(page, frameBody, CPF, SENHA);
 
-        // Login no e-CRV
-        await realizarLoginEVerificacoes(page, frameBody, CPF, SENHA);
+            // Condições para saber se há uma sessão aberta
+            const frameExterno = await page.waitForFrame(frame => frame.name() === 'GB_frame');
 
-        // Condições para saber se há uma sessão aberta
-        const frameExterno = await page.waitForFrame(frame => frame.name() === 'GB_frame');
-
-        if (frameExterno) {
-            // Aguarda pelo carregamento do iframe interno GB_frame
-            const frameInterno = await new Promise(resolve => {
-                frameExterno.waitForSelector('iframe#GB_frame').then(async () => {
-                    const handleIframeInterno = await frameExterno.$('iframe#GB_frame');
-                    const frameInterno = await handleIframeInterno.contentFrame();
-                    resolve(frameInterno);
-                });
-            });
-
-            // Caso o iframe interno tenha sido encontrado
-            if (frameInterno) {
-                // Procura o texto "Já existe uma sessão aberta."
-                const sessaoAberta = await frameInterno.evaluate(() => {
-                    const elemento = document.querySelector('h4');
-                    return elemento && elemento.textContent.includes('Já existe uma sessão aberta.');
+            if (frameExterno) {
+                // Aguarda pelo carregamento do iframe interno GB_frame
+                const frameInterno = await new Promise(resolve => {
+                    frameExterno.waitForSelector('iframe#GB_frame').then(async () => {
+                        const handleIframeInterno = await frameExterno.$('iframe#GB_frame');
+                        const frameInterno = await handleIframeInterno.contentFrame();
+                        resolve(frameInterno);
+                    });
                 });
 
-                // Caso tenha uma sessão aberta
-                if (sessaoAberta) {
-                    // Tendo uma sessão aberta, vai até "Encerrar sessões"
-                    await Tab(page, 13)
-                    await page.keyboard.press('Enter')
-                    await Delay(5000)
-                    // Retira novo frame
-                    let frameBody = page.frames().find(frame => frame.name() === 'body');
-                    // Login no e-CRV
-                    await realizarLoginEVerificacoes(page, frameBody, CPF, SENHA);
-                    // Autenticação de Certificado
-                    await Tab(page, 13)
-                    await page.keyboard.press('Enter')
+                // Caso o iframe interno tenha sido encontrado
+                if (frameInterno) {
+                    // Procura o texto "Já existe uma sessão aberta."
+                    const sessaoAberta = await frameInterno.evaluate(() => {
+                        const elemento = document.querySelector('h4');
+                        return elemento && elemento.textContent.includes('Já existe uma sessão aberta.');
+                    });
+
+                    // Caso tenha uma sessão aberta
+                    if (sessaoAberta) {
+                        // Tendo uma sessão aberta, vai até "Encerrar sessões"
+                        await Tab(page, 13)
+                        await page.keyboard.press('Enter')
+                        await Delay(5000)
+                        // Retira novo frame
+                        let frameBody = page.frames().find(frame => frame.name() === 'body');
+                        // Login no e-CRV
+                        await realizarLoginEVerificacoes(page, frameBody, CPF, SENHA);
+                        // Autenticação de Certificado
+                        await Tab(page, 13)
+                        await page.keyboard.press('Enter')
+                    } else {
+                        // Não existe sessão aberta
+                        // Autenticação de Certificado
+                        await Tab(page, 13)
+                        await page.keyboard.press('Enter')
+                    }
                 } else {
-                    // Não existe sessão aberta
-                    // Autenticação de Certificado
-                    await Tab(page, 13)
-                    await page.keyboard.press('Enter')
+                    console.log("Iframe interno 'GB_frame' não encontrado.");
                 }
             } else {
-                console.log("Iframe interno 'GB_frame' não encontrado.");
+                console.log("Iframe externo 'GB_frame' não encontrado.");
             }
-        } else {
-            console.log("Iframe externo 'GB_frame' não encontrado.");
-        }
 
-        await Delay(5000)
+            await Delay(5000)
 
-        // Retira novo frame
-        frameBody = page.frames().find(frame => frame.name() === 'body');
+            // Retira novo frame
+            frameBody = page.frames().find(frame => frame.name() === 'body');
 
-        // Condiçao para Login Excedido
-        if (lastDialogMessage.includes('QUANTIDADE')) {
-            console.log('Quantidade diária de login excedida.')
-            await browser.close()
-            return;
-        }
+            // Condiçao para Login Excedido
+            if (lastDialogMessage.includes('QUANTIDADE')) {
+                console.log('Quantidade diária de login excedida.')
+                await browser.close()
+                return;
+            }
 
-        // Espera o texto de 'Bem-vindo' aparecer na tela
-        await frameBody.waitForFunction(
-            text => document.body.innerText.includes(text),
-            {},
-            'Bem-vindo(a) ao e-CRVsp!'
-        );
+            // Espera o texto de 'Bem-vindo' aparecer na tela
+            await frameBody.waitForFunction(
+                text => document.body.innerText.includes(text),
+                {},
+                'Bem-vindo(a) ao e-CRVsp!'
+            );
 
-        // Clica no menu dropdown
-        await frameBody.evaluate(() => {
-            Array.from(document.querySelectorAll('.list-group-item a.dropdown-toggle')).find(el => el.textContent.includes('Processos')).click();
-        });
-        await Delay(1000)
+            // Clica no menu dropdown
+            await frameBody.evaluate(() => {
+                Array.from(document.querySelectorAll('.list-group-item a.dropdown-toggle')).find(el => el.textContent.includes('Processos')).click();
+            });
+            await Delay(1000)
 
-        // Espera e Clica na opção do menu dropdown
-        await frameBody.waitForFunction(
-            text => document.body.innerText.includes(text),
-            {},
-            'Consultar Ficha Cadastral'
-        );
-        await frameBody.evaluate(() => {
-            Array.from(document.querySelectorAll('.list-group-item-sub.dropdown a')).find(el => el.textContent.includes('Consultar Ficha Cadastral')).click();
-        });
-
-        // Espera o campo carregar
-        await frameBody.waitForSelector('.campos_upper')
-
-        // Aceita possível dialog
-        dialogAction = 'accept';
-
-        // Instancia array que receberá os dados das placas
-        let todosOsDados = [];
-
-        // Loop para pesquisa e obtençao dos dados da placa
-        placaLoop: for (i = 1; i < dadosDaPrimeiraColuna.length; i++) {
-            // Pega valor da placa
-            let placa = dadosDaPrimeiraColuna[i]
-            // Validador de Captcha
-            let captchaCorreto = false;
+            // Espera e Clica na opção do menu dropdown
+            await frameBody.waitForFunction(
+                text => document.body.innerText.includes(text),
+                {},
+                'Consultar Ficha Cadastral'
+            );
+            await frameBody.evaluate(() => {
+                Array.from(document.querySelectorAll('.list-group-item-sub.dropdown a')).find(el => el.textContent.includes('Consultar Ficha Cadastral')).click();
+            });
 
             // Espera o campo carregar
             await frameBody.waitForSelector('.campos_upper')
 
-            // Condiçao para Captcha correto
-            while (!captchaCorreto) {
-                // Limpa o campo da Placa para evitar erro nos loops
-                await frameBody.evaluate(() => {
-                    document.querySelector('.campos_upper').value = '';
-                });
-                // Insere a placa e tira um screenshot do captcha
-                await frameBody.type('.campos_upper', placa);
-                await page.screenshot({ path: './imageCaptcha/captcha.png', clip: { x: 230, y: 361, width: 225, height: 73 } });
+            // Aceita possível dialog
+            dialogAction = 'accept';
 
-                // Resolve o captcha e insere a resposta
-                let captcha = await DeathCaptcha('./imageCaptcha/captcha.png');
-                await frameBody.type('#captchaResponse', captcha);
+            // Instancia array que receberá os dados das placas
+            todosOsDados = [];
 
-                // Clica no botão de pesquisa
-                await frameBody.evaluate(() => {
-                    document.querySelector('.bt_pesquisar').click();
-                });
+            // Loop para pesquisa e obtençao dos dados da placa
+            placaLoop: for (i = 1; i < dadosDaPrimeiraColuna.length; i++) {
+                // Pega valor da placa
+                let placa = dadosDaPrimeiraColuna[i]
+                // Validador de Captcha
+                let captchaCorreto = false;
 
-                try {
-                    // Espera pelo texto indicativo de sucesso
-                    await frameBody.waitForFunction(
-                        text => document.body.innerText.includes(text),
-                        { timeout: 5000 }, // Tempo de espera antes de considerar falha no captcha
-                        'DADOS DA FICHA CADASTRAL'
-                    );
-                    // Troca o bool para que saia do While
-                    captchaCorreto = true;
-                    console.log(`Dados da placa ${placa} retirados.`)
-                } catch (error) {
-                    // Se o texto não for encontrado, o loop tentará novamente
-                    // Valida o tipo de mensagem do dialog, pois pode ser erro de captcha ou de Placa inexistente
-                    if (lastDialogMessage.includes('PLACA')) {
-                        console.log(`A placa ${placa} é inválida.`)
-                        // Insere a placa e o status inválida no Array
-                        todosOsDados.push({ "Placa": placa, 'Status': 'Inválido' })
-                        captchaCorreto = false;
-                        continue placaLoop;
-                    } else if (lastDialogMessage.includes('IMAGE')) {
-                        console.log("Captcha incorreto, tentando novamente...");
-                        captchaCorreto = false;
+                // Espera o campo carregar
+                await frameBody.waitForSelector('.campos_upper')
+
+                // Condiçao para Captcha correto
+                while (!captchaCorreto) {
+                    // Limpa o campo da Placa para evitar erro nos loops
+                    await frameBody.evaluate(() => {
+                        document.querySelector('.campos_upper').value = '';
+                    });
+                    // Insere a placa e tira um screenshot do captcha
+                    await frameBody.type('.campos_upper', placa);
+                    await page.screenshot({ path: './imageCaptcha/captcha.png', clip: { x: 230, y: 361, width: 225, height: 73 } });
+
+                    // Resolve o captcha e insere a resposta
+                    let captcha = await DeathCaptcha('./imageCaptcha/captcha.png');
+                    await frameBody.type('#captchaResponse', captcha);
+
+                    // Clica no botão de pesquisa
+                    await frameBody.evaluate(() => {
+                        document.querySelector('.bt_pesquisar').click();
+                    });
+
+                    try {
+                        // Espera pelo texto indicativo de sucesso
+                        await frameBody.waitForFunction(
+                            text => document.body.innerText.includes(text),
+                            { timeout: 5000 }, // Tempo de espera antes de considerar falha no captcha
+                            'DADOS DA FICHA CADASTRAL'
+                        );
+                        // Troca o bool para que saia do While
+                        captchaCorreto = true;
+                        console.log(`Dados da placa ${placa} retirados.`)
+                    } catch (error) {
+                        // Se o texto não for encontrado, o loop tentará novamente
+                        // Valida o tipo de mensagem do dialog, pois pode ser erro de captcha ou de Placa inexistente
+                        if (lastDialogMessage.includes('PLACA')) {
+                            console.log(`A placa ${placa} é inválida.`)
+                            // Insere a placa e o status inválida no Array
+                            todosOsDados.push({ "Placa": placa, 'Status': 'Inválido' })
+                            captchaCorreto = false;
+                            continue placaLoop;
+                        } else if (lastDialogMessage.includes('IMAGE')) {
+                            console.log("Captcha incorreto, tentando novamente...");
+                            captchaCorreto = false;
+                        }
+
                     }
-                    
                 }
-            }
 
-            // Espera a classe dos dados aparecer
-            await frameBody.waitForSelector('.texto_menor')
+                // Espera a classe dos dados aparecer
+                await frameBody.waitForSelector('.texto_menor')
 
-            // Retira todos os valores que está na tabela e atribuiu a variável de forma JSON
-            const dadosTabela = await frameBody.evaluate(() => {
-                const dados = {};
-                const fieldsets = document.querySelectorAll('fieldset');
+                // Retira todos os valores que está na tabela e atribuiu a variável de forma JSON
+                const dadosTabela = await frameBody.evaluate(() => {
+                    const dados = {};
+                    const fieldsets = document.querySelectorAll('fieldset');
 
-                fieldsets.forEach(fieldset => {
-                    const linhas = fieldset.querySelectorAll('table tr');
+                    fieldsets.forEach(fieldset => {
+                        const linhas = fieldset.querySelectorAll('table tr');
 
-                    linhas.forEach(linha => {
-                        const colunas = linha.querySelectorAll('td');
-                        colunas.forEach((coluna, index) => {
-                            // Verifica se a coluna atual contém uma chave
-                            const chave = coluna.querySelector('.texto_black2')?.innerText.trim();
-                            if (chave) {
-                                // O valor corresponde à próxima célula
-                                const valor = colunas[index + 1]?.querySelector('.texto_menor')?.innerText.trim();
-                                if (valor) {
-                                    dados[chave] = valor;
-                                } else {
-                                    dados[chave] = ''
+                        linhas.forEach(linha => {
+                            const colunas = linha.querySelectorAll('td');
+                            colunas.forEach((coluna, index) => {
+                                // Verifica se a coluna atual contém uma chave
+                                const chave = coluna.querySelector('.texto_black2')?.innerText.trim();
+                                if (chave) {
+                                    // O valor corresponde à próxima célula
+                                    const valor = colunas[index + 1]?.querySelector('.texto_menor')?.innerText.trim();
+                                    if (valor) {
+                                        dados[chave] = valor;
+                                    } else {
+                                        dados[chave] = ''
+                                    }
                                 }
-                            }
+                            });
                         });
                     });
+
+                    return dados;
                 });
 
-                return dados;
-            });
+                // Insere os dados retirados no array
+                todosOsDados.push({ 'placa': placa, 'Status': 'Válido', ...dadosTabela });
+                await Delay(5000)
+                // Clica no voltar para reiniciar o Loop
+                await frameBody.evaluate(() => {
+                    document.querySelector('#tabBotoes > tbody > tr > td > a.bt_voltar').click();
+                });
+            }
 
-            // Insere os dados retirados no array
-            todosOsDados.push({ 'placa': placa, 'Status': 'Válido', ...dadosTabela });
-            await Delay(5000)
-            // Clica no voltar para reiniciar o Loop
-            await frameBody.evaluate(() => {
-                document.querySelector('#tabBotoes > tbody > tr > td > a.bt_voltar').click();
-            });
+            salvarDadosExcel(todosOsDados)
+
+        } else {
+            console.log("Frame 'body' não encontrado.");
         }
 
-        // Headers do Excel
-        const headers = ['Placa', 'Status', 'N° da Ficha', 'Ano Ficha', 'Renavam', 'Chassi', 'Placa', 'Município', 'Despachante', 'Status Registro', 'Retorno Consistência', 'Opção', 'Inclusão da Ficha'];
+        await browser.close()
+    } catch (e) {
 
-        // Insete os headers no Excel
-        const worksheet = XLSX.utils.aoa_to_sheet([headers]);
+        salvarDadosExcel(todosOsDados)
 
-        // Adicionar os dados no Excel
-        todosOsDados.forEach(dado => {
-            const row = Object.values(dado);
-            XLSX.utils.sheet_add_aoa(worksheet, [row], { origin: -1 });
-        });
+        await page.screenshot({ path: './teste.png' })
+        await browser.close()
+        console.log("Erro inesperado durante o processo: " + e)
 
-        // Adiciona a planilha
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Dados");
-
-        // Salvar a planilha
-        XLSX.writeFile(workbook, 'dadosTabela.xlsx');
-
-    } else {
-        console.log("Frame 'body' não encontrado.");
     }
-
-    await browser.close()
-
 }
 
 
