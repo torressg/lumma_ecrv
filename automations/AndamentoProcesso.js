@@ -76,15 +76,7 @@ async function ProcessoECRV() {
 
         // Armazenando dados do Excel
         const DadosDoExcel = readExcelFile();
-        console.log(DadosDoExcel.length)
-        for (let i = 0; i < DadosDoExcel.length; i++) {
-            let ficha = (DadosDoExcel[i]['CHASSI']).toString()
-            let ano = (DadosDoExcel[i]['ANO']).toString()
-            console.log(ficha)
-            console.log(ano)
-            console.log(i)
 
-        }
         browser = await puppeteer.launch({
             headless: false,
             protocolTimeout: 90000
@@ -97,7 +89,6 @@ async function ProcessoECRV() {
 
         await page.goto(linkECRV, { waitUntil: 'networkidle2' })
 
-        await Delay(100000)
         // Ativa percepção de dialogs, com condições
         page.on('dialog', async dialog => {
             lastDialogMessage = dialog.message();
@@ -175,8 +166,6 @@ async function ProcessoECRV() {
 
             }
 
-
-
             await Delay(5000)
 
             const cookies = await page.cookies();
@@ -220,6 +209,7 @@ async function ProcessoECRV() {
                     Array.from(document.querySelectorAll('.list-group-item-sub.dropdown a')).find(el => el.textContent.includes('Andamento do Processo')).click();
                 });
 
+                await Delay(2000)
                 await frameBody.waitForFunction(
                     text => document.body.innerText.includes(text),
                     {},
@@ -229,15 +219,9 @@ async function ProcessoECRV() {
                 frameBody.waitForNavigation()
                 frameBody = page.frames().find(frame => frame.name() === 'body');
 
-                // await frameBody.waitForSelector('.campos_upper')
-
-                // frameBody = page.frames().find(frame => frame.name() === 'body');
-
-                // await frameBody.waitForSelector('.campos_upper')
-
                 todosOsDados = [];
 
-                processoLoop: for (i = 0; i <= DadosDoExcel.length; i++) {
+                processoLoop: for (i = 0; i < DadosDoExcel.length; i++) {
                     let ficha = (DadosDoExcel[i]['CHASSI']).toString()
                     let ano = (DadosDoExcel[i]['ANO']).toString()
 
@@ -248,16 +232,16 @@ async function ProcessoECRV() {
 
                     await frameBody.waitForSelector('.campos_upper')
 
+                    frameBody = page.frames().find(frame => frame.name() === 'body');
+
                     // Condiçao para Captcha correto
+                    await frameBody.evaluate(() => {
+                        document.querySelector('.campos_upper').value = '';
+                    });
+                    await frameBody.type('#bloco2 > table > tbody > tr:nth-child(1) > td > input', ficha);
+                    await frameBody.type('.campos', ano)
+
                     while (!captchaCorreto) {
-
-                        frameBody = page.frames().find(frame => frame.name() === 'body');
-
-                        await frameBody.evaluate(() => {
-                            document.querySelector('.campos_upper').value = '';
-                        });
-                        await frameBody.type('#bloco2 > table > tbody > tr:nth-child(1) > td > input', ficha);
-                        await frameBody.type('.campos', ano)
 
                         await page.screenshot({
                             path: '../imageCaptcha/captcha2.png',
@@ -283,7 +267,7 @@ async function ProcessoECRV() {
                         } catch (error) {
                             // Se o texto não for encontrado, o loop tentará novamente
                             // Valida o tipo de mensagem do dialog, pois pode ser erro de captcha ou de Placa inexistente
-                            if (lastDialogMessage.includes('NÃO')) {
+                            if (lastDialogMessage.includes('CADASTRO')) {
                                 console.log(`A ficha ${ficha} é inválida.`)
                                 // Insere a placa e o status inválida no Array
                                 todosOsDados.push({
@@ -348,7 +332,6 @@ async function ProcessoECRV() {
                     });
                 }
 
-                console.log(todosOsDados)
                 salvarDadosExcel(todosOsDados)
 
             }
@@ -359,7 +342,7 @@ async function ProcessoECRV() {
         await browser.close()
 
     } catch (e) {
-        console.log("Erro inesperado durante o processo: " + e)
+        console.log("Erro inesperado durante o processo: " + e.stack)
 
         try {
             salvarDadosExcel(todosOsDados)
@@ -368,7 +351,7 @@ async function ProcessoECRV() {
             console.log("Não existem dados para serem salvos.")
         }
 
-        await page.screenshot({ path: './Z-ERRO.png' })
+        await page.screenshot({ path: '../Z-Erro-AP.png' })
 
         await browser.close()
     }

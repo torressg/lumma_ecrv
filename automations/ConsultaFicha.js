@@ -78,6 +78,11 @@ async function consultaECRV() {
             protocolTimeout: 90000
         });
         page = await browser.newPage();
+
+        const cookiesString = await fs.readFile('./cookies.json');
+        const cookies = JSON.parse(cookiesString);
+        await page.setCookie(...cookies)
+        
         await page.goto(linkECRV, { waitUntil: 'networkidle2' })
 
         // Ativa percepção de dialogs, com condições
@@ -97,55 +102,65 @@ async function consultaECRV() {
         // Caso o Frame esteja disponível
         if (frameBody) {
 
-            // Login no e-CRV
-            await realizarLoginEVerificacoes(frameBody, CPF, SENHA);
+            try {
+                await frameBody.waitForFunction(
+                    text => document.body.innerText.includes(text),
+                    {},
+                    'Bem-vindo(a) ao e-CRVsp!'
+                );
+            } catch (error) {
+                // Login no e-CRV
+                await realizarLoginEVerificacoes(frameBody, CPF, SENHA);
 
-            // Condições para saber se há uma sessão aberta
-            const frameExterno = await page.waitForFrame(frame => frame.name() === 'GB_frame');
+                // Condições para saber se há uma sessão aberta
+                const frameExterno = await page.waitForFrame(frame => frame.name() === 'GB_frame');
 
-            if (frameExterno) {
-                // Aguarda pelo carregamento do iframe interno GB_frame
-                const frameInterno = await new Promise(resolve => {
-                    frameExterno.waitForSelector('iframe#GB_frame').then(async () => {
-                        const handleIframeInterno = await frameExterno.$('iframe#GB_frame');
-                        const frameInterno = await handleIframeInterno.contentFrame();
-                        resolve(frameInterno);
+                if (frameExterno) {
+                    // Aguarda pelo carregamento do iframe interno GB_frame
+                    const frameInterno = await new Promise(resolve => {
+                        frameExterno.waitForSelector('iframe#GB_frame').then(async () => {
+                            const handleIframeInterno = await frameExterno.$('iframe#GB_frame');
+                            const frameInterno = await handleIframeInterno.contentFrame();
+                            resolve(frameInterno);
+                        });
                     });
-                });
 
-                // Caso o iframe interno tenha sido encontrado
-                if (frameInterno) {
-                    // Procura o texto "Já existe uma sessão aberta."
-                    const sessaoAberta = await frameInterno.evaluate(() => {
-                        const elemento = document.querySelector('h4');
-                        return elemento && elemento.textContent.includes('Já existe uma sessão aberta.');
-                    });
+                    // Caso o iframe interno tenha sido encontrado
+                    if (frameInterno) {
+                        // Procura o texto "Já existe uma sessão aberta."
+                        const sessaoAberta = await frameInterno.evaluate(() => {
+                            const elemento = document.querySelector('h4');
+                            return elemento && elemento.textContent.includes('Já existe uma sessão aberta.');
+                        });
 
-                    // Caso tenha uma sessão aberta
-                    if (sessaoAberta) {
-                        // Tendo uma sessão aberta, vai até "Encerrar sessões"
-                        await Tab(page, 13)
-                        await page.keyboard.press('Enter')
-                        await Delay(5000)
-                        // Retira novo frame
-                        let frameBody = page.frames().find(frame => frame.name() === 'body');
-                        // Login no e-CRV
-                        await realizarLoginEVerificacoes(frameBody, CPF, SENHA);
-                        // Autenticação de Certificado
-                        await Tab(page, 13)
-                        await page.keyboard.press('Enter')
+                        // Caso tenha uma sessão aberta
+                        if (sessaoAberta) {
+                            // Tendo uma sessão aberta, vai até "Encerrar sessões"
+                            await Tab(page, 13)
+                            await page.keyboard.press('Enter')
+                            await Delay(5000)
+                            // Retira novo frame
+                            let frameBody = page.frames().find(frame => frame.name() === 'body');
+                            // Login no e-CRV
+                            await realizarLoginEVerificacoes(frameBody, CPF, SENHA);
+                            // Autenticação de Certificado
+                            await Tab(page, 13)
+                            await page.keyboard.press('Enter')
+                        } else {
+                            // Não existe sessão aberta
+                            // Autenticação de Certificado
+                            await Tab(page, 13)
+                            await page.keyboard.press('Enter')
+                        }
                     } else {
-                        // Não existe sessão aberta
-                        // Autenticação de Certificado
-                        await Tab(page, 13)
-                        await page.keyboard.press('Enter')
+                        console.log("Iframe interno 'GB_frame' não encontrado.");
                     }
                 } else {
-                    console.log("Iframe interno 'GB_frame' não encontrado.");
+                    console.log("Iframe externo 'GB_frame' não encontrado.");
                 }
-            } else {
-                console.log("Iframe externo 'GB_frame' não encontrado.");
+
             }
+
 
             await Delay(5000)
 
@@ -301,7 +316,7 @@ async function consultaECRV() {
 
         salvarDadosExcel(todosOsDados)
 
-        await page.screenshot({ path: './Z-ERRO.png' })
+        await page.screenshot({ path: '../Z-Erro-CF.png' })
 
         await browser.close()
         console.log("Erro inesperado durante o processo: " + e)
