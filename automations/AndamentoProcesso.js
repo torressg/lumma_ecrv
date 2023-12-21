@@ -30,7 +30,7 @@ function salvarDadosExcel(dados) {
     });
     let workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Dados");
-    XLSX.writeFile(workbook, 'AndamentoProcesso Retorno.xlsx');
+    XLSX.writeFile(workbook, '../Retorno/AndamentoProcesso Retorno.xlsx');
 }
 
 // Variáveis para dialog gerais

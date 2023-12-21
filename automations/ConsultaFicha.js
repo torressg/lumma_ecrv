@@ -26,7 +26,7 @@ function salvarDadosExcel(dados) {
     });
     let workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Dados");
-    XLSX.writeFile(workbook, '../FichaCadastral Retorno.xlsx');
+    XLSX.writeFile(workbook, '../Retorno/FichaCadastral Retorno.xlsx');
 }
 
 // Variáveis para dialog gerais
