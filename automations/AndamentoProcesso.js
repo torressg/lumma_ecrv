@@ -22,7 +22,7 @@ function readExcelFile() {
 }
 
 function salvarDadosExcel(dados) {
-    const headers = ['N da Ficha', 'Ano Ficha', 'Renavam', 'Chassi', 'Placa', 'Município', 'Despachante', 'Opção', 'Status Registro', 'Retorno Consistência', 'Retorno da BIN', 'Inclusão', 'Emissão Documento', 'Inclusão Histórico', 'Status'];
+    const headers = ['N da Ficha', 'Ano Ficha', 'Renavam', 'Chassi', 'Placa', 'Município', 'Despachante', 'Opção', 'Status Registro', 'Retorno Consistência', 'Retorno da BIN', 'Inclusão', 'Emissão Documento', 'Inclusão Histórico', 'Código', 'Status', 'Motivo da Reprovação', ''];
     let worksheet = XLSX.utils.aoa_to_sheet([headers]);
     dados.forEach(dado => {
         const row = Object.values(dado);
@@ -208,7 +208,6 @@ async function ProcessoECRV() {
                 await frameBody.evaluate(() => {
                     Array.from(document.querySelectorAll('.list-group-item-sub.dropdown a')).find(el => el.textContent.includes('Andamento do Processo')).click();
                 });
-
                 await Delay(2000)
                 await frameBody.waitForFunction(
                     text => document.body.innerText.includes(text),
@@ -222,7 +221,7 @@ async function ProcessoECRV() {
                 todosOsDados = [];
 
                 processoLoop: for (i = 0; i < DadosDoExcel.length; i++) {
-                    let ficha = (DadosDoExcel[i]['CHASSI']).toString()
+                    let ficha = (DadosDoExcel[i]['FICHA']).toString()
                     let ano = (DadosDoExcel[i]['ANO']).toString()
 
                     // Validador de Captcha
@@ -235,10 +234,15 @@ async function ProcessoECRV() {
                     frameBody = page.frames().find(frame => frame.name() === 'body');
 
                     // Condiçao para Captcha correto
-                    await frameBody.evaluate(() => {
-                        document.querySelector('.campos_upper').value = '';
-                    });
+                    await Tab(page, 19)
+                    await Delay(2000)
+                    await page.keyboard.down('Control')
+                    await page.keyboard.down('A')
+                    await page.keyboard.up('Control')
+                    await page.keyboard.up('A')
+                    await page.keyboard.press('Backspace')
                     await frameBody.type('#bloco2 > table > tbody > tr:nth-child(1) > td > input', ficha);
+                    await Delay(2000)
                     await frameBody.type('.campos', ano)
 
                     while (!captchaCorreto) {
@@ -285,6 +289,7 @@ async function ProcessoECRV() {
                                     'Inclusão': '',
                                     'Emissão Documento': '',
                                     'Inclusão Histórico': '',
+                                    'Código Segurança CRV:': '',
                                     Status: 'Inválido'
                                 })
                                 captchaCorreto = false;
@@ -297,7 +302,7 @@ async function ProcessoECRV() {
                     }
                     await frameBody.waitForSelector('.texto_menor')
 
-                    const dadosTabela = await frameBody.evaluate(() => {
+                    let dadosTabela = await frameBody.evaluate(() => {
                         const dados = {};
                         const fieldsets = document.querySelectorAll('fieldset');
 
@@ -324,6 +329,27 @@ async function ProcessoECRV() {
 
                         return dados;
                     });
+                    console.log(dadosTabela)
+                    if (dadosTabela.Status === 'Aprovado') {
+                        let novoDadosTabela = {};
+                        for (let chave in dadosTabela) {
+                            if (chave !== 'Status') {
+                                novoDadosTabela[chave] = dadosTabela[chave];
+                            }
+                        }
+
+                        // Adicionando a nova chave antes de 'Status'
+                        novoDadosTabela['Código Segurança CRV:'] = '';
+
+                        // Adicionando 'Status' no final
+                        novoDadosTabela['Status'] = dadosTabela['Status'] !== 'Aprovado' ? 'Aprovado' : dadosTabela['Status'];
+
+                        dadosTabela = novoDadosTabela;
+
+                        console.log(dadosTabela);
+                    } else {
+                        console.log('ap')
+                    }
                     todosOsDados.push(dadosTabela);
                     await Delay(5000)
 
