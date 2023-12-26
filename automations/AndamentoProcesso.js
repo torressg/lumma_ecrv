@@ -22,7 +22,7 @@ function readExcelFile() {
 }
 
 function salvarDadosExcel(dados) {
-    const headers = ['N da Ficha', 'Ano Ficha', 'Renavam', 'Chassi', 'Placa', 'Município', 'Despachante', 'Opção', 'Status Registro', 'Retorno Consistência', 'Retorno da BIN', 'Inclusão', 'Emissão Documento', 'Inclusão Histórico', 'Código', 'Status', 'Motivo da Reprovação', ''];
+    const headers = ['N da Ficha', 'Ano Ficha', 'Renavam', 'Chassi', 'Placa', 'Município', 'Despachante', 'Opção', 'Status Registro', 'Retorno Consistência', 'Retorno da BIN', 'Inclusão', 'Emissão Documento', 'Inclusão Histórico', 'Código', 'Status', 'Data', 'Local', 'Status', 'Motivo da Reprovação', 'Classificaçao Reprovaçao', 'Documentos'];
     let worksheet = XLSX.utils.aoa_to_sheet([headers]);
     dados.forEach(dado => {
         const row = Object.values(dado);
@@ -252,7 +252,7 @@ async function ProcessoECRV() {
                             clip: { x: 233, y: 444, width: 210, height: 57 }
                         })
                         let captcha = await DeathCaptcha('../imageCaptcha/captcha2.png');
-                        await frameBody.type('#captchaResponse', captcha);
+                        await frameBody.type('#captchaResponse', captcha.toUpperCase());
                         // Clica no botão de pesquisa
                         await frameBody.evaluate(() => {
                             document.querySelector('.bt_pesquisar').click();
@@ -330,6 +330,7 @@ async function ProcessoECRV() {
                         return dados;
                     });
                     console.log(dadosTabela)
+
                     if (dadosTabela.Status === 'Aprovado') {
                         let novoDadosTabela = {};
                         for (let chave in dadosTabela) {
@@ -346,19 +347,87 @@ async function ProcessoECRV() {
 
                         dadosTabela = novoDadosTabela;
 
-                        console.log(dadosTabela);
+                        await frameBody.evaluate(new Function('voltar()'));
+
                     } else {
                         console.log('ap')
+                        frameBody = page.frames().find(frame => frame.name() === 'body');
+
+                        const isvisualizarDocumentosAvailable = await frameBody.evaluate(() => {
+                            return typeof visualizarDocumentos === 'function';
+                        });
+
+                        if (isvisualizarDocumentosAvailable) {
+                            await Delay(5000)
+                            const onclickValue = await frameBody.evaluate(() => {
+                                const element = document.querySelector('#printableContent > td.texto > table:nth-child(1) > tbody > tr:nth-child(1) > td > fieldset > fieldset:nth-child(4) > table > tbody > tr > td:nth-child(3) > a');
+                                return element ? element.getAttribute('onclick') : null;
+                            });
+                            if (onclickValue) {
+                                await frameBody.evaluate(new Function(onclickValue));
+                            }
+                        } else {
+                            console.log("A função visualizarDocumentos não está disponível.");
+                            await Tab(page, 19)
+                            await page.keyboard.press('Enter')
+                        }
+
+                        await Delay(10000)
+
+                        frameBody = page.frames().find(frame => frame.name() === 'body');
+
+                        await Delay(5000)
+
+                        const dadosTabelaMotivo = await frameBody.evaluate(() => {
+                            const tabela = document.querySelector('#historico'); // Seletor da tabela
+                            if (!tabela) return []; // Se a tabela não for encontrada, retorna um array vazio
+
+                            const linhas = Array.from(tabela.querySelectorAll('tbody tr')); // Seleciona todas as linhas da tabela
+                            const dados = [];
+
+                            linhas.forEach(linha => {
+                                const colunas = linha.querySelectorAll('td');
+                                const registroLinha = {
+                                    data: colunas[0] ? colunas[0].innerText.trim() : '',
+                                    local: colunas[1] ? colunas[1].innerText.trim() : '',
+                                    status: colunas[2] ? colunas[2].innerText.trim() : '',
+                                    motivoReprovacao: colunas[3] ? colunas[3].innerText.trim() : '',
+                                    classificacaoReprovacao: colunas[4] ? colunas[4].innerText.trim() : '',
+                                    documentos: colunas[5] ? colunas[5].innerText.trim() : ''
+                                };
+                                dados.push(registroLinha);
+                            });
+
+                            return dados;
+                        });
+
+                        console.log(dadosTabelaMotivo[1]);
+
+                        dadosTabela = { ...dadosTabela, ...dadosTabelaMotivo[1] }
+
+                        const isVoltarAvailable = await frameBody.evaluate(() => {
+                            return typeof voltar === 'function';
+                        });
+
+                        if (isVoltarAvailable) {
+                            await Delay(5000)
+                            await frameBody.evaluate(new Function('voltar()'));
+                        } else { 
+                            console.log("A função 'voltar' não está disponível.");
+                            await Tab(page, 4)
+                            await page.keyboard.press('Enter')
+                        }
+                        await Delay(10000)
                     }
+
                     todosOsDados.push(dadosTabela);
                     await Delay(5000)
+                    console.log(todosOsDados)
 
-                    await frameBody.evaluate(() => {
-                        document.querySelector('#tabBotoes > tbody > tr > td > a.bt_voltar').click();
-                    });
                 }
 
                 salvarDadosExcel(todosOsDados)
+
 
             }
         } else {
