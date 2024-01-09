@@ -10,7 +10,7 @@ const DeathCaptcha = require('../modules/DeathByCaptcha/death');
 // Funçao de ler Excel e armazenar apenas a primeia coluna
 function readExcelFile() {
     // Ler o arquivo
-    const workbook = XLSX.readFile('../ECRV.xlsx');
+    const workbook = XLSX.readFile('S:\\Automacoes\\Salvados\\02 - Consulta Ficha e Andamento eCRVsp\\ECRV.xlsx');
 
     // Pegar o nome da primeira planilha
     const sheetName = workbook.SheetNames[0];
@@ -30,7 +30,7 @@ function salvarDadosExcel(dados) {
     });
     let workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Dados");
-    XLSX.writeFile(workbook, '../Retorno/AndamentoProcesso Retorno.xlsx');
+    XLSX.writeFile(workbook, 'S:\\Automacoes\\Salvados\\02 - Consulta Ficha e Andamento eCRVsp\\Retorno\\AndamentoProcesso Retorno.xlsx');
 }
 
 // Variáveis para dialog gerais
@@ -77,6 +77,16 @@ async function ProcessoECRV() {
         // Armazenando dados do Excel
         const DadosDoExcel = readExcelFile();
 
+        const email = DadosDoExcel[0]['User Process']
+
+        console.log('--------------------------//--------------------------//--------------------------');
+        console.log('--------------------------//--------------------------//--------------------------');
+        console.log(`--------------------------//     START AUTOMATION - USER:  ${email}    //-----`);
+        console.log(`--------------------------//     Consulta Ficha    //--------------------------`);
+        console.log('--------------------------//--------------------------//--------------------------');
+        console.log('--------------------------//--------------------------//--------------------------');
+
+        console.log(`--------------------------//------ ${DadosDoExcel.length} Registros ------//--------------------------`)
         browser = await puppeteer.launch({
             headless: false,
             protocolTimeout: 90000
@@ -175,7 +185,7 @@ async function ProcessoECRV() {
 
             // Condiçao para Login Excedido
             if (lastDialogMessage.includes('QUANTIDADE')) {
-                console.log('Quantidade diária de login excedida.')
+                console.log(`${new Date().toLocaleString()} - Quantidade diária de login excedida.`)
                 await browser.close()
                 return;
             }
@@ -267,12 +277,13 @@ async function ProcessoECRV() {
                             );
                             // Troca o bool para que saia do While
                             captchaCorreto = true;
-                            console.log(`Dados da ficha ${ficha} retirados.`)
+                            console.log(`${new Date().toLocaleString()} - Dados da ficha ${ficha} retirados.`)
                         } catch (error) {
                             // Se o texto não for encontrado, o loop tentará novamente
                             // Valida o tipo de mensagem do dialog, pois pode ser erro de captcha ou de Placa inexistente
                             if (lastDialogMessage.includes('CADASTRO')) {
-                                console.log(`A ficha ${ficha} é inválida.`)
+                                console.log(`${new Date().toLocaleString()} - A ficha ${ficha} é inválida.`)
+                                console.error(`${new Date().toLocaleString()} - A placa ${placa} é inválida.`)
                                 // Insere a placa e o status inválida no Array
                                 todosOsDados.push({
                                     'N° da Ficha': ficha,
@@ -295,7 +306,7 @@ async function ProcessoECRV() {
                                 captchaCorreto = false;
                                 continue processoLoop;
                             } else if (lastDialogMessage.includes('IMAGE')) {
-                                console.log("Captcha incorreto, tentando novamente...");
+                                console.error(`${new Date().toLocaleString()} - Captcha incorreto, tentando novamente...`);
                                 captchaCorreto = false;
                             }
                         }
@@ -329,7 +340,6 @@ async function ProcessoECRV() {
 
                         return dados;
                     });
-                    console.log(dadosTabela)
 
                     if (dadosTabela.Status === 'Aprovado') {
                         let novoDadosTabela = {};
@@ -350,7 +360,6 @@ async function ProcessoECRV() {
                         await frameBody.evaluate(new Function('voltar()'));
 
                     } else {
-                        console.log('ap')
                         frameBody = page.frames().find(frame => frame.name() === 'body');
 
                         const isvisualizarDocumentosAvailable = await frameBody.evaluate(() => {
@@ -367,7 +376,7 @@ async function ProcessoECRV() {
                                 await frameBody.evaluate(new Function(onclickValue));
                             }
                         } else {
-                            console.log("A função visualizarDocumentos não está disponível.");
+                            console.error("A função visualizarDocumentos não está disponível.");
                             await Tab(page, 19)
                             await page.keyboard.press('Enter')
                         }
@@ -401,8 +410,6 @@ async function ProcessoECRV() {
                             return dados;
                         });
 
-                        console.log(dadosTabelaMotivo[1]);
-
                         dadosTabela = { ...dadosTabela, ...dadosTabelaMotivo[1] }
 
                         const isVoltarAvailable = await frameBody.evaluate(() => {
@@ -412,8 +419,8 @@ async function ProcessoECRV() {
                         if (isVoltarAvailable) {
                             await Delay(5000)
                             await frameBody.evaluate(new Function('voltar()'));
-                        } else { 
-                            console.log("A função 'voltar' não está disponível.");
+                        } else {
+                            console.error("A função 'voltar' não está disponível.");
                             await Tab(page, 4)
                             await page.keyboard.press('Enter')
                         }
@@ -422,7 +429,6 @@ async function ProcessoECRV() {
 
                     todosOsDados.push(dadosTabela);
                     await Delay(5000)
-                    console.log(todosOsDados)
 
                 }
 
@@ -431,24 +437,27 @@ async function ProcessoECRV() {
 
             }
         } else {
-            console.log("Frame 'body' não encontrado.");
+            console.error("Frame 'body' não encontrado.");
         }
 
         await browser.close()
 
     } catch (e) {
-        console.log("Erro inesperado durante o processo: " + e.stack)
+        console.error("Erro inesperado durante o processo: " + e.stack)
 
         try {
             salvarDadosExcel(todosOsDados)
-
         } catch (error) {
-            console.log("Não existem dados para serem salvos.")
+            console.error("Não existem dados para serem salvos.")
         }
+        console.log(`${new Date().toLocaleString()} - Erro inesperado, reiniciando...`);
 
         await page.screenshot({ path: '../Z-Erro-AP.png' })
+        console.error("Erro inesperado durante o processo: " + e.stack + " " + placa)
 
         await browser.close()
+        ProcessoECRV()
+
     }
 }
 

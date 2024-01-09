@@ -26,7 +26,7 @@ function salvarDadosExcel(dados) {
     });
     let workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Dados");
-    XLSX.writeFile(workbook, '../Retorno/FichaCadastral Retorno.xlsx');
+    XLSX.writeFile(workbook, 'S:\\Automacoes\\Salvados\\02 - Consulta Ficha e Andamento eCRVsp\\Retorno\\FichaCadastral Retorno.xlsx');
 }
 
 // Variáveis para dialog gerais
@@ -60,10 +60,13 @@ async function realizarLoginEVerificacoes(frameBody, CPF, SENHA) {
     await frameBody.evaluate(() => document.querySelector('.modal-footer .btn-primary').click());
 }
 
+
 async function consultaECRV() {
     let browser
     let page
     let todosOsDados
+
+
     try {
         // Variáveis necessárias
         const CPF = process.env.CPF
@@ -71,8 +74,19 @@ async function consultaECRV() {
         const linkECRV = 'https://www.e-crvsp.sp.gov.br/'
 
         // Armazenando dados do Excel
-        const DadosDoExcel = LerExcel('../ECRV.xlsx');
+        const DadosDoExcel = LerExcel('S:\\Automacoes\\Salvados\\02 - Consulta Ficha e Andamento eCRVsp\\ECRV.xlsx');
 
+        const email = DadosDoExcel[0]['User Process']
+
+        console.log('--------------------------//--------------------------//--------------------------');
+        console.log('--------------------------//--------------------------//--------------------------');
+        console.log(`--------------------------//     START AUTOMATION - USER:  ${email}    //-----`);
+        console.log(`--------------------------//     Consulta Ficha    //--------------------------`);
+        console.log('--------------------------//--------------------------//--------------------------');
+        console.log('--------------------------//--------------------------//--------------------------');
+
+
+        console.log(`--------------------------//------ ${DadosDoExcel.length} Registros ------//--------------------------`)
         browser = await puppeteer.launch({
             headless: false,
             protocolTimeout: 90000
@@ -82,7 +96,7 @@ async function consultaECRV() {
         const cookiesString = await fs.readFile('./cookies.json');
         const cookies = JSON.parse(cookiesString);
         await page.setCookie(...cookies)
-        
+
         await page.goto(linkECRV, { waitUntil: 'networkidle2' })
 
         // Ativa percepção de dialogs, com condições
@@ -153,10 +167,10 @@ async function consultaECRV() {
                             await page.keyboard.press('Enter')
                         }
                     } else {
-                        console.log("Iframe interno 'GB_frame' não encontrado.");
+
                     }
                 } else {
-                    console.log("Iframe externo 'GB_frame' não encontrado.");
+
                 }
 
             }
@@ -169,7 +183,7 @@ async function consultaECRV() {
 
             // Condiçao para Login Excedido
             if (lastDialogMessage.includes('QUANTIDADE')) {
-                console.log('Quantidade diária de login excedida.')
+                console.log(`${new Date().toLocaleString()} - Quantidade diária de login excedida.`)
                 await browser.close()
                 return;
             }
@@ -248,18 +262,20 @@ async function consultaECRV() {
                         );
                         // Troca o bool para que saia do While
                         captchaCorreto = true;
-                        console.log(`Dados da placa ${placa} retirados.`)
+                        console.log(`${new Date().toLocaleString()} - Dados da placa ${placa} retirados.`)
+
                     } catch (error) {
                         // Se o texto não for encontrado, o loop tentará novamente
                         // Valida o tipo de mensagem do dialog, pois pode ser erro de captcha ou de Placa inexistente
                         if (lastDialogMessage.includes('PLACA')) {
-                            console.log(`A placa ${placa} é inválida.`)
+                            console.log(`${new Date().toLocaleString()} - A placa ${placa} é inválida.`)
+                            console.error(`${new Date().toLocaleString()} - A placa ${placa} é inválida.`)
                             // Insere a placa e o status inválida no Array
                             todosOsDados.push({ "Placa": placa, 'Status': 'Inválido' })
                             captchaCorreto = false;
                             continue placaLoop;
                         } else if (lastDialogMessage.includes('IMAGE')) {
-                            console.log("Captcha incorreto, tentando novamente...");
+                            console.error(`${new Date().toLocaleString()} - Captcha incorreto, tentando novamente...`);
                             captchaCorreto = false;
                         }
 
@@ -315,11 +331,15 @@ async function consultaECRV() {
     } catch (e) {
 
         salvarDadosExcel(todosOsDados)
+        console.log(`${new Date().toLocaleString()} - Erro inesperado, reiniciando...`);
 
         await page.screenshot({ path: '../Z-Erro-CF.png' })
 
         await browser.close()
-        console.log("Erro inesperado durante o processo: " + e)
+
+        consultaECRV()
+
+        console.error("Erro inesperado durante o processo: " + e.stack + " " + placa)
     }
 }
 
