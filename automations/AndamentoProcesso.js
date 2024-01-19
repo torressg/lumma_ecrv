@@ -77,18 +77,18 @@ async function ProcessoECRV() {
         // Armazenando dados do Excel
         const DadosDoExcel = readExcelFile();
 
-        const email = DadosDoExcel[0]['User Process']
+        const email = DadosDoExcel[0]['USER']
 
         console.log('--------------------------//--------------------------//--------------------------');
         console.log('--------------------------//--------------------------//--------------------------');
         console.log(`--------------------------//     START AUTOMATION - USER:  ${email}    //-----`);
-        console.log(`--------------------------//     Consulta Ficha    //--------------------------`);
+        console.log(`--------------------------//     Andamento Processo    //--------------------------`);
         console.log('--------------------------//--------------------------//--------------------------');
         console.log('--------------------------//--------------------------//--------------------------');
 
         console.log(`--------------------------//------ ${DadosDoExcel.length} Registros ------//--------------------------`)
         browser = await puppeteer.launch({
-            headless: false,
+            headless: 'new',
             protocolTimeout: 90000
         });
         page = await browser.newPage();
@@ -151,7 +151,7 @@ async function ProcessoECRV() {
                         // Caso tenha uma sessão aberta
                         if (sessaoAberta) {
                             // Tendo uma sessão aberta, vai até "Encerrar sessões"
-                            await Tab(page, 13)
+                            await Tab(page, 14)
                             await page.keyboard.press('Enter')
                             await Delay(5000)
                             // Retira novo frame
@@ -159,19 +159,19 @@ async function ProcessoECRV() {
                             // Login no e-CRV
                             await realizarLoginEVerificacoes(frameBody, CPF, SENHA);
                             // Autenticação de Certificado
-                            await Tab(page, 13)
+                            await Tab(page, 14)
                             await page.keyboard.press('Enter')
                         } else {
                             // Não existe sessão aberta
                             // Autenticação de Certificado
-                            await Tab(page, 13)
+                            await Tab(page, 14)
                             await page.keyboard.press('Enter')
                         }
                     } else {
-                        console.log("Iframe interno 'GB_frame' não encontrado.");
+                        console.error("Iframe interno 'GB_frame' não encontrado.");
                     }
                 } else {
-                    console.log("Iframe externo 'GB_frame' não encontrado.");
+                    console.error("Iframe externo 'GB_frame' não encontrado.");
                 }
 
             }
@@ -277,13 +277,15 @@ async function ProcessoECRV() {
                             );
                             // Troca o bool para que saia do While
                             captchaCorreto = true;
+                            console.log(`--------------------------//--------------------------//--------------------------`);
                             console.log(`${new Date().toLocaleString()} - Dados da ficha ${ficha} retirados.`)
                         } catch (error) {
                             // Se o texto não for encontrado, o loop tentará novamente
                             // Valida o tipo de mensagem do dialog, pois pode ser erro de captcha ou de Placa inexistente
                             if (lastDialogMessage.includes('CADASTRO')) {
+                                console.log(`--------------------------//--------------------------//--------------------------`);
                                 console.log(`${new Date().toLocaleString()} - A ficha ${ficha} é inválida.`)
-                                console.error(`${new Date().toLocaleString()} - A placa ${placa} é inválida.`)
+                                console.error(`${new Date().toLocaleString()} - A ficha ${ficha} é inválida.`)
                                 // Insere a placa e o status inválida no Array
                                 todosOsDados.push({
                                     'N° da Ficha': ficha,
@@ -432,7 +434,14 @@ async function ProcessoECRV() {
 
                 }
 
+                console.log(`${new Date().toLocaleString()} - Dados sendo salvos no Excel.`)
                 salvarDadosExcel(todosOsDados)
+                console.log('--------------------------//--------------------------//--------------------------');
+                console.log('--------------------------//--------------------------//--------------------------');
+                console.log(`--------------------------//      END AUTOMATION      //--------------------------`);
+                console.log('--------------------------//--------------------------//--------------------------');
+                console.log('--------------------------//--------------------------//--------------------------');
+
 
 
             }
@@ -453,8 +462,9 @@ async function ProcessoECRV() {
         console.log(`${new Date().toLocaleString()} - Erro inesperado, reiniciando...`);
 
         await page.screenshot({ path: '../Z-Erro-AP.png' })
-        console.error("Erro inesperado durante o processo: " + e.stack + " " + placa)
+        console.error("Erro inesperado durante o processo: " + e.stack)
 
+        todosOsDados = []
         await browser.close()
         ProcessoECRV()
 
@@ -462,3 +472,5 @@ async function ProcessoECRV() {
 }
 
 ProcessoECRV()
+
+module.exports = ProcessoECRV

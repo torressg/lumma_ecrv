@@ -2,7 +2,6 @@
   "dependencies": {
     "dotenv": "^16.3.1",
     "form-data": "^4.0.0",
-    "node-fetch": "^3.3.2",
     "puppeteer": "^21.6.0",
     "xlsx": "^0.18.5"
   }

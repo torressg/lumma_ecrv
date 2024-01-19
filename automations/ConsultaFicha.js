@@ -3,8 +3,8 @@ const XLSX = require('xlsx');
 const fs = require('fs').promises;
 require('dotenv').config({ path: '../constants/.env' });
 
-const Tab = require('../modules/Pup_modules/tab');
-const Delay = require('../modules/Pup_modules/delay');
+const  Tab   = require('../modules/Pup_modules/tab');
+const  Delay  = require('../modules/Pup_modules/delay');
 const DeathCaptcha = require('../modules/DeathByCaptcha/death');
 
 // Funçao de ler Excel e armazenar apenas a primeia coluna
@@ -14,16 +14,18 @@ function LerExcel(caminhoArquivo) {
     const sheet = workbook.Sheets[sheetName];
 
     const dados = XLSX.utils.sheet_to_json(sheet, { header: 1 }); // Converte a aba em um array de arrays
-    return dados.map(row => [row[0], row[1], row[2]]); // Retorna as três primeiras colunas de cada linha
+    return dados.map(row => [row[0], row[1], row[2], row[3]]); // Retorna as três primeiras colunas de cada linha
 }
 
 function salvarDadosExcel(dados) {
     const headers = ['Placa', 'Status', 'N° da Ficha', 'Ano Ficha', 'Renavam', 'Chassi', 'Placa', 'Município', 'Despachante', 'Status Registro', 'Retorno Consistência', 'Opção', 'Inclusão da Ficha'];
     let worksheet = XLSX.utils.aoa_to_sheet([headers]);
-    dados.forEach(dado => {
-        const row = Object.values(dado);
-        XLSX.utils.sheet_add_aoa(worksheet, [row], { origin: -1 });
-    });
+    if (dados.length > 0) {
+        dados.forEach(dado => {
+            const row = Object.values(dado);
+            XLSX.utils.sheet_add_aoa(worksheet, [row], { origin: -1 });
+        });
+    }
     let workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Dados");
     XLSX.writeFile(workbook, 'S:\\Automacoes\\Salvados\\02 - Consulta Ficha e Andamento eCRVsp\\Retorno\\FichaCadastral Retorno.xlsx');
@@ -34,13 +36,15 @@ let dialogAction = 'dismiss';
 let lastDialogMessage = '';
 
 // Função de login
-async function realizarLoginEVerificacoes(frameBody, CPF, SENHA) {
+async function realizarLoginEVerificacoes(page, frameBody, CPF, SENHA) {
 
-    // Parte do código que você quer repetir
+
     await frameBody.waitForSelector('.modal-footer .btn-primary', { visible: true });
     await frameBody.waitForSelector('#notificacoes > div > div > div.modal-footer > div > div.col-sm-4 > button');
     await frameBody.evaluate(() => document.querySelector('.modal-footer .btn-primary').click());
-    await Delay(4000);
+    await Delay(4000)
+
+    frameBody = page.frames().find(frame => frame.name() === 'body');
 
     // Digita acessos
     await frameBody.waitForSelector('#cpf');
@@ -76,7 +80,7 @@ async function consultaECRV() {
         // Armazenando dados do Excel
         const DadosDoExcel = LerExcel('S:\\Automacoes\\Salvados\\02 - Consulta Ficha e Andamento eCRVsp\\ECRV.xlsx');
 
-        const email = DadosDoExcel[0]['User Process']
+        const email = DadosDoExcel[1][3]
 
         console.log('--------------------------//--------------------------//--------------------------');
         console.log('--------------------------//--------------------------//--------------------------');
@@ -124,7 +128,7 @@ async function consultaECRV() {
                 );
             } catch (error) {
                 // Login no e-CRV
-                await realizarLoginEVerificacoes(frameBody, CPF, SENHA);
+                await realizarLoginEVerificacoes(page, frameBody, CPF, SENHA);
 
                 // Condições para saber se há uma sessão aberta
                 const frameExterno = await page.waitForFrame(frame => frame.name() === 'GB_frame');
@@ -150,7 +154,7 @@ async function consultaECRV() {
                         // Caso tenha uma sessão aberta
                         if (sessaoAberta) {
                             // Tendo uma sessão aberta, vai até "Encerrar sessões"
-                            await Tab(page, 13)
+                            await Tab(page, 14)
                             await page.keyboard.press('Enter')
                             await Delay(5000)
                             // Retira novo frame
@@ -158,12 +162,12 @@ async function consultaECRV() {
                             // Login no e-CRV
                             await realizarLoginEVerificacoes(frameBody, CPF, SENHA);
                             // Autenticação de Certificado
-                            await Tab(page, 13)
+                            await Tab(page, 14)
                             await page.keyboard.press('Enter')
                         } else {
                             // Não existe sessão aberta
                             // Autenticação de Certificado
-                            await Tab(page, 13)
+                            await Tab(page, 14)
                             await page.keyboard.press('Enter')
                         }
                     } else {
@@ -262,12 +266,14 @@ async function consultaECRV() {
                         );
                         // Troca o bool para que saia do While
                         captchaCorreto = true;
+                        console.log('--------------------------//--------------------------//--------------------------')
                         console.log(`${new Date().toLocaleString()} - Dados da placa ${placa} retirados.`)
 
                     } catch (error) {
                         // Se o texto não for encontrado, o loop tentará novamente
                         // Valida o tipo de mensagem do dialog, pois pode ser erro de captcha ou de Placa inexistente
                         if (lastDialogMessage.includes('PLACA')) {
+                            console.log('--------------------------//--------------------------//--------------------------')
                             console.log(`${new Date().toLocaleString()} - A placa ${placa} é inválida.`)
                             console.error(`${new Date().toLocaleString()} - A placa ${placa} é inválida.`)
                             // Insere a placa e o status inválida no Array
@@ -323,7 +329,15 @@ async function consultaECRV() {
                 });
             }
 
+            console.log(todosOsDados)
+            console.log(`${new Date().toLocaleString()} - Dados sendo salvos no Excel.`)
             salvarDadosExcel(todosOsDados)
+            console.log('--------------------------//--------------------------//--------------------------');
+            console.log('--------------------------//--------------------------//--------------------------');
+            console.log(`--------------------------//      END AUTOMATION      //--------------------------`);
+            console.log('--------------------------//--------------------------//--------------------------');
+            console.log('--------------------------//--------------------------//--------------------------');
+    
         }
 
         await browser.close()
@@ -331,18 +345,23 @@ async function consultaECRV() {
     } catch (e) {
 
         salvarDadosExcel(todosOsDados)
+        
+        console.log(`--------------------------//--------------------------//--------------------------`);
         console.log(`${new Date().toLocaleString()} - Erro inesperado, reiniciando...`);
 
         await page.screenshot({ path: '../Z-Erro-CF.png' })
 
+        todosOsDados = []
         await browser.close()
 
         consultaECRV()
 
-        console.error("Erro inesperado durante o processo: " + e.stack + " " + placa)
+        console.error("Erro inesperado durante o processo: " + e.stack + " ")
     }
 }
 
 
 
 consultaECRV()
+
+module.exports = consultaECRV
